@@ -1,0 +1,3 @@
+jwt:
+  secret: YlZ2JkU3pVZ0ZkY0pNd1BqZV9rTXdkdkpTTUVnQ2Y1U1VLMU1uUWtJQ1pKd1EySzN4dnFVR0Zz
+  expirationMs: 3600000

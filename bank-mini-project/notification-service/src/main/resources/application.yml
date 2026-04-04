@@ -1,0 +1,17 @@
+spring:
+  application:
+    name: notification-service
+
+  config:
+    import: optional:configserver:http://localhost:8888
+
+  cloud:
+    config:
+      fail-fast: true
+
+  spring:
+    kafka:
+      consumer:
+        group-id: notification-group-v3
+        properties:
+          spring.json.value.default.type: com.bank.bank_common.dto.notification.request.NotificationRequest
