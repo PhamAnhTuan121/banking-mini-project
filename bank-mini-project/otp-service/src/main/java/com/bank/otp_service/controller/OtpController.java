@@ -7,11 +7,13 @@ import com.bank.otp_service.service.OtpService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/otp")
 @RequiredArgsConstructor
+@PreAuthorize("hasRole('INTERNAL')")
 public class OtpController {
 
     private final OtpService otpService;

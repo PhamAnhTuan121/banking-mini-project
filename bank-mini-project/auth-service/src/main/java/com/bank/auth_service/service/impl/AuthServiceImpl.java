@@ -1,8 +1,7 @@
 package com.bank.auth_service.service.impl;
 
-import com.bank.auth_service.client.OtpClient;
-import com.bank.auth_service.dto.request.LoginRequest;
-import com.bank.auth_service.dto.request.RegisterRequest;
+
+import com.bank.auth_service.dto.request.*;
 import com.bank.auth_service.dto.response.AuthResponse;
 import com.bank.auth_service.entity.RefreshToken;
 import com.bank.auth_service.entity.Role;
@@ -18,10 +17,12 @@ import com.bank.auth_service.security.CustomUserDetail;
 import com.bank.auth_service.service.AuthService;
 import com.bank.auth_service.service.RefreshTokenService;
 import com.bank.auth_service.util.AuditUtil;
+import com.bank.bank_common.client.OtpClient;
 import com.bank.bank_common.dto.auth.response.RegisterRequestPhoneResponse;
 import com.bank.bank_common.dto.event.StatusEvent;
 import com.bank.bank_common.dto.event.UserActivatedEvent;
 import com.bank.bank_common.dto.otp.OtpType;
+import com.bank.bank_common.dto.otp.request.ResendOtpRequest;
 import com.bank.bank_common.dto.otp.request.SendOtpRequest;
 import com.bank.bank_common.dto.otp.request.VerifyOtpRequest;
 import com.bank.bank_common.exception.BusinessException;
@@ -64,14 +65,6 @@ public class AuthServiceImpl implements AuthService {
 
         String username = loginRequest.getUsername();
 
-        authRedisRepository.checkLoginRateLimit(username);
-        int attempts = authRedisRepository.getLoginAttempts(username);
-
-        if (attempts > 5) {
-            auditUtil.fail(null, username, "USER_LOGIN", "LOGIN", "Too many attempts");
-            throw new BusinessException(ErrorCode.TOO_MANY_LOGIN_ATTEMPTS);
-        }
-
         try {
             authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(
@@ -80,10 +73,14 @@ public class AuthServiceImpl implements AuthService {
                     )
             );
         } catch (Exception e) {
-            auditUtil.fail(null, username, "USER_LOGIN", "LOGIN", "Wrong credentials");
+
+            int attempts = authRedisRepository.increaseLoginAttempts(username);
+
+            auditUtil.fail(null, username, "USER_LOGIN", "LOGIN",
+                    "Wrong credentials - attempt: " + attempts);
+
             throw new BusinessException(ErrorCode.INVALID_CREDENTIALS);
         }
-
         authRedisRepository.resetLoginAttempts(username);
 
         User user = userRepository.findByUsername(username)
@@ -103,7 +100,6 @@ public class AuthServiceImpl implements AuthService {
 
         return AuthResponse.builder()
                 .message("Login successful")
-                .status(200)
                 .user(userMapper.toResponse(user))
                 .accessToken(accessToken)
                 .refreshToken(refreshToken.getToken())
@@ -113,6 +109,19 @@ public class AuthServiceImpl implements AuthService {
     @Override
     @Transactional
     public RegisterRequestPhoneResponse register(RegisterRequest request) {
+// ✅ Email unique
+        if (userRepository.existsByEmail(request.getEmail())) {
+            throw new BusinessException(ErrorCode.EMAIL_ALREADY_EXISTS);
+        }
+
+        if (userRepository.existsByUsername(request.getUsername())) {
+            throw new BusinessException(ErrorCode.USERNAME_ALREADY_EXISTS);
+        }
+
+        Optional<User> userOpt = userRepository.findByPhone(request.getPhone());
+        if (userOpt.isPresent() && userOpt.get().getPhoneVerified()) {
+            throw new BusinessException(ErrorCode.PHONE_ALREADY_REGISTER);
+        }
 
         Optional<User> existingUserOpt = userRepository.findByPhone(request.getPhone());
 
@@ -205,14 +214,7 @@ public class AuthServiceImpl implements AuthService {
         UserActivatedEvent event = new UserActivatedEvent();
         event.setUserId(user.getId());
         event.setPhone(user.getPhone());
-        event.setFullName(user.getUsername());
-
-        try {
-            createAccountCustomerProducer.send(event);
-        } catch (Exception e) {
-            log.error("Kafka send failed", e);
-        }
-
+        createAccountCustomerProducer.send(event);
         String accessToken = generateAccessToken(user);
         RefreshToken refreshToken = refreshTokenService.createRefreshToken(user);
 
@@ -221,7 +223,6 @@ public class AuthServiceImpl implements AuthService {
 
         return AuthResponse.builder()
                 .message("Phone verified successfully")
-                .status(200)
                 .user(userMapper.toResponse(user))
                 .accessToken(accessToken)
                 .refreshToken(refreshToken.getToken())
@@ -248,7 +249,6 @@ public class AuthServiceImpl implements AuthService {
 
         return AuthResponse.builder()
                 .message("Token refreshed successfully")
-                .status(200)
                 .user(userMapper.toResponse(user))
                 .accessToken(newAccessToken)
                 .refreshToken(newRefreshToken.getToken())
@@ -273,19 +273,19 @@ public class AuthServiceImpl implements AuthService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
-        if (user.getStatus() == User.Status.BLOCKED) return; // idempotent
+        if (user.getStatus() == User.Status.BLOCKED) return;
 
         user.setStatus(User.Status.BLOCKED);
         userRepository.save(user);
 
-        // 🔥 publish event
+        System.out.println("before producer");
         statusProducer.sendBlockAccount(new StatusEvent(
                 UUID.randomUUID().toString(),
                 userId,
                 "USER_BLOCKED",
                 LocalDateTime.now()
         ));
-
+        System.out.println("after producer");
         auditUtil.success(user.getId(), user.getUsername(),
                 "USER_BLOCK", "UPDATE", "User blocked");
     }
@@ -307,5 +307,147 @@ public class AuthServiceImpl implements AuthService {
 
         auditUtil.success(user.getId(), user.getUsername(),
                 "USER_UNBLOCK", "UPDATE", "User unblocked");
+    }
+
+    @Override
+    public void resendOtp(String identifier) {
+        identifier = identifier.trim().toLowerCase();
+
+        ResendOtpRequest request = new ResendOtpRequest(
+                identifier,
+                OtpType.REGISTER
+        );
+        otpClient.resend(request);
+    }
+
+    @Override
+    @Transactional
+    public void changePassword(Long userId, ChangePasswordRequest request) {
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+
+        // check old password
+        if (!passwordEncoder.matches(request.getOldPassword(), user.getPassword())) {
+            auditUtil.fail(userId, user.getUsername(),
+                    "CHANGE_PASSWORD", "UPDATE", "Wrong old password");
+            throw new BusinessException(ErrorCode.INVALID_OLD_PASSWORD);
+        }
+
+        // check new password != old
+        if (passwordEncoder.matches(request.getNewPassword(), user.getPassword())) {
+            throw new BusinessException(ErrorCode.PASSWORD_DUPLICATED);
+        }
+
+        user.setPassword(passwordEncoder.encode(request.getNewPassword()));
+        userRepository.save(user);
+
+        // 🔥 revoke all refresh tokens (force logout)
+        refreshTokenService.deleteByUserId(userId);
+
+        auditUtil.success(userId, user.getUsername(),
+                "CHANGE_PASSWORD", "UPDATE", "Password changed");
+    }
+
+    @Override
+    @Transactional
+    public void forgotPassword(ForgotPasswordRequest request) {
+
+        User user = userRepository.findByPhone(request.getIdentifier())
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+
+        try {
+            otpClient.verifyOtp(new VerifyOtpRequest(
+                    request.getIdentifier(),
+                    request.getOtp(),
+                    OtpType.FORGOT_PASSWORD
+            ));
+        } catch (Exception e) {
+            auditUtil.fail(user.getId(), user.getUsername(),
+                    "FORGOT_PASSWORD", "RESET", "OTP invalid");
+            throw e;
+        }
+
+        String newPassword = request.getNewPassword();
+
+        if (newPassword == null || newPassword.isBlank()) {
+            throw new BusinessException(ErrorCode.INVALID_PASSWORD);
+        }
+
+        if (passwordEncoder.matches(newPassword, user.getPassword())) {
+            throw new BusinessException(ErrorCode.PASSWORD_MUST_BE_DIFFERENT);
+        }
+
+        user.setPassword(passwordEncoder.encode(newPassword));
+        userRepository.save(user);
+
+        refreshTokenService.deleteByUserId(user.getId());
+
+        auditUtil.success(user.getId(), user.getUsername(),
+                "FORGOT_PASSWORD", "RESET", "Password reset success");
+    }
+
+    @Override
+    public void sendForgotPasswordOtp(String phone) {
+        try {
+            otpClient.sendOtp(new SendOtpRequest(phone, OtpType.FORGOT_PASSWORD));
+        } catch (Exception e) {
+            log.error("Send OTP forgot password failed", e);
+        }
+    }
+
+    @Override
+    public void requestChangePhone(Long userId,
+                                   ChangePhoneRequest request) {
+
+        String newPhone = request.getNewPhone().trim();
+
+        if (userRepository.existsByPhone(newPhone)) {
+            throw new BusinessException(ErrorCode.PHONE_ALREADY_REGISTER);
+        }
+
+        authRedisRepository.savePendingPhoneChange(
+                userId,
+                newPhone
+        );
+
+        otpClient.sendOtp(
+                new SendOtpRequest(
+                        newPhone,
+                        OtpType.CHANGE_PHONE
+                )
+        );
+    }
+
+    @Override
+    @Transactional
+    public void verifyChangePhone(Long userId,
+                                  VerifyChangePhoneRequest request) {
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() ->
+                        new BusinessException(ErrorCode.USER_NOT_FOUND));
+
+        String newPhone =
+                authRedisRepository.getPendingPhoneChange(userId);
+
+        if (newPhone == null) {
+            throw new BusinessException(ErrorCode.PHONE_NOT_FOUND);
+        }
+
+        otpClient.verifyOtp(
+                new VerifyOtpRequest(
+                        newPhone,
+                        request.getOtp(),
+                        OtpType.CHANGE_PHONE
+                )
+        );
+
+        user.setPhone(newPhone);
+        user.setPhoneVerified(true);
+
+        userRepository.save(user);
+
+        authRedisRepository.deletePendingPhoneChange(userId);
     }
 }

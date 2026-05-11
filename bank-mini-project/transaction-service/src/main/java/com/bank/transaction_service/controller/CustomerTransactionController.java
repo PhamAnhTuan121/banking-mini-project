@@ -53,4 +53,10 @@ public class CustomerTransactionController {
                 )
         );
     }
+
+    @PostMapping("/resend-otp")
+    public ResponseEntity<?> resendOtp(@RequestParam String correlationId) {
+        transactionService.resendOtp(correlationId);
+        return ResponseEntity.ok("Resend OTP success");
+    }
 }

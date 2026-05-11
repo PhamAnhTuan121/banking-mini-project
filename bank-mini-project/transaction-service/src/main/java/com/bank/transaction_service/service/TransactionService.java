@@ -3,8 +3,8 @@ package com.bank.transaction_service.service;
 import com.bank.transaction_service.dto.transaction.request.ConfirmTransferRequest;
 import com.bank.transaction_service.dto.transaction.request.TransactionRequest;
 import com.bank.transaction_service.dto.transaction.response.StatisticsResponse;
-import com.bank.transaction_service.dto.transaction.response.TransferResponseConfirm;
 import com.bank.transaction_service.dto.transaction.response.TransactionResponse;
+import com.bank.transaction_service.dto.transaction.response.TransferResponseConfirm;
 import com.bank.transaction_service.dto.transaction.response.TransferResponseRequest;
 import com.bank.transaction_service.entity.TransactionStatus;
 import com.bank.transaction_service.entity.TransactionType;
@@ -15,6 +15,10 @@ public interface TransactionService {
     TransferResponseRequest requestTransfer(TransactionRequest request, Long userId);
 
     TransferResponseConfirm confirmTransfer(ConfirmTransferRequest request, Long userId);
+
+    void cancelTransaction(Long id, Long adminId);
+
+    void refundTransaction(Long id, Long adminId);
 
     Page<TransactionResponse> getHistory(
             Long userId,
@@ -36,7 +40,7 @@ public interface TransactionService {
 
     TransactionResponse getTransactionDetail(Long id);
 
-    void retryTransaction(Long id, Long employeeId);
+    void retryTransaction(Long id, Long adminId);
 
     Page<TransactionResponse> getAllTransactions(
             String accountNumber,
@@ -44,6 +48,8 @@ public interface TransactionService {
             int page,
             int size
     );
+
+    void resendOtp(String identifier);
 
     StatisticsResponse getStatistics();
 

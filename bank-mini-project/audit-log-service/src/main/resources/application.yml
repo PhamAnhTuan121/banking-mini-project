@@ -3,12 +3,8 @@ spring:
     name: auditlog-service
 
   config:
-    import: optional:configserver:http://localhost:8888
+    import: optional:configserver:http://config-server:8888
 
   cloud:
     config:
       fail-fast: true
-
-  kafka:
-    consumer:
-      group-id: audit-log-group

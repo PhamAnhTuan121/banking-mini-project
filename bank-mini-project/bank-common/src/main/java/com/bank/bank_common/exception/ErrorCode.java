@@ -32,6 +32,14 @@ public enum ErrorCode {
     ACCOUNT_FROZEN(400, "ACC_016", "Account frozen"),
     ACCOUNT_CLOSED(400, "ACC_017", "Account closed"),
 
+
+
+    // ===== CUSTOMER =====
+    PHONE_NOT_FOUND(400, "PHONE_001", "Phone not found"),
+    CUSTOMER_NOT_FOUND(400, "PHONE_002", "Customer not found"),
+    CUSTOMER_ALREADY_EXISTS(400, "PHONE_003", "Customer already exists"),
+    FULL_NAME_NOT_NULL(400, "NAME_004", "Full name must not be null"),
+
     // ===== AUTH =====
     USER_NOT_FOUND(404, "AUTH_001", "User not found"),
     INVALID_CREDENTIALS(401, "AUTH_002", "Invalid username or password"),
@@ -44,15 +52,24 @@ public enum ErrorCode {
     PHONE_ALREADY_REGISTER(400, "AUTH_009", "Phone already registered"),
     TOO_MANY_LOGIN_ATTEMPTS(429, "AUTH_010", "Too many login attempts"),
     TOO_MANY_REQUESTS(429, "AUTH_011", "Too many requests"),
+    AUTH_SERVICE_UNAVAILABLE(429, "AUTH_012", "Auth service unavailable"),
+    EMAIL_ALREADY_EXISTS(400, "EMAIL_001", "Email already exists"),
+    USERNAME_ALREADY_EXISTS(400, "USERNAME_001", "Username already exists"),
+    FULL_NAME_ALREADY_EXISTS(400, "FULLNAME_001", "Full name already exists"),
+    PASSWORD_DUPLICATED(400, "PASSWORD_DUPLICATED", "Password duplicated"),
+    INVALID_OLD_PASSWORD(401, "AUTH_0013", "Old password is incorrect"),
+    INVALID_PASSWORD(401, "AUTH_0014", "Password is incorrect"),
+    PASSWORD_MUST_BE_DIFFERENT(401, "AUTH_0015", "Password must be different"),
 
     // ===== OTP =====
     OTP_INVALID(400, "OTP_001", "OTP is invalid"),
     OTP_EXPIRED(400, "OTP_002", "OTP is expired"),
-    OTP_BLOCKED(400, "OTP_003", "Too many attempts"),
+    TOO_MANY_ATTEMPTS(400, "OTP_003", "Too many attempts"),
     OTP_NOT_FOUND(404, "OTP_004", "No active OTP"),
     OTP_SERVICE_UNAVAILABLE(503, "OTP_005", "OTP service unavailable"),
     OTP_ALREADY_USED(400, "OTP_006", "OTP already used"),
     OTP_COOLDOWN(400, "OTP_007", "OTP Cooldown"),
+    OTP_NOT_NULL(400, "OTP_008", "OTP Not null"),
 
     // ===== TRANSACTION =====
     TRANSACTION_NOT_FOUND(404, "TS_001", "Transaction not found"),
@@ -62,6 +79,8 @@ public enum ErrorCode {
     UNAUTHORIZED_TRANSFER(403, "TS_004", "Unauthorized transfer"),
     USER_SERVICE_UNAVAILABLE(400, "TS_005", "User service unavailable"),
     OTP_VERIFICATION_FAILED(400, "TS_006", "OTP verification failed"),
+    CANNOT_CANCEL_SUCCESS(400, "TS_007", "Can't cancel success"),
+    ALREADY_REFUNDED(400, "TS_008", "Refund failed"),
 
     UNAUTHORIZED(401, "TS_006", "Unauthorized");
 

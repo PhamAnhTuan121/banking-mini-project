@@ -38,10 +38,10 @@ public class OtpRedisRepositoryImpl implements OtpRedisRepository {
 
     @Override
     public void saveOtp(String identifier, OtpType type, String otp, long ttl) {
+        identifier = identifier.trim().toLowerCase();
         try {
             OtpData data = OtpData.builder()
                     .code(otp)
-                    .used(false)
                     .build();
 
             redisTemplate.opsForValue().set(
@@ -63,8 +63,13 @@ public class OtpRedisRepositoryImpl implements OtpRedisRepository {
 
         try {
             String json = redisTemplate.opsForValue().get(key);
+            Long ttl = redisTemplate.getExpire(key, TimeUnit.SECONDS);
 
-            if (json == null) return null;
+            log.info("GET OTP key={}, ttl={}, json={}", key, ttl, json);
+
+            if (json == null || ttl == null || ttl <= 0) {
+                return null;
+            }
 
             return objectMapper.readValue(json, OtpData.class);
 
@@ -82,6 +87,7 @@ public class OtpRedisRepositoryImpl implements OtpRedisRepository {
             Long ttl = redisTemplate.getExpire(key, TimeUnit.SECONDS);
 
             if (ttl == null || ttl <= 0) {
+                log.warn("OTP key expired, skip update");
                 return;
             }
 
@@ -114,8 +120,11 @@ public class OtpRedisRepositoryImpl implements OtpRedisRepository {
         String key = attemptKey(identifier, type);
 
         try {
-            redisTemplate.opsForValue().increment(key);
-            redisTemplate.expire(key, ATTEMPT_TTL, TimeUnit.MINUTES);
+            Long value = redisTemplate.opsForValue().increment(key);
+            if (value != null && value == 1) {
+                redisTemplate.expire(key, ATTEMPT_TTL, TimeUnit.MINUTES);
+            }
+
         } catch (Exception e) {
             log.error("Redis increment attempt failed", e);
         }
@@ -154,7 +163,7 @@ public class OtpRedisRepositoryImpl implements OtpRedisRepository {
         try {
             redisTemplate.opsForValue().set(
                     cooldownKey(identifier, type),
-                    "1",
+                    "3",
                     seconds,
                     TimeUnit.SECONDS
             );
@@ -168,5 +177,24 @@ public class OtpRedisRepositoryImpl implements OtpRedisRepository {
         redisTemplate.delete(otpKey(identifier, type));
         redisTemplate.delete(attemptKey(identifier, type));
         redisTemplate.delete(cooldownKey(identifier, type));
+    }
+
+    @Override
+    public int incrementAttemptsAndGet(String identifier, OtpType type) {
+        String key = attemptKey(identifier, type);
+
+        try {
+            Long value = redisTemplate.opsForValue().increment(key);
+
+            if (value != null && value == 1) {
+                redisTemplate.expire(key, ATTEMPT_TTL, TimeUnit.MINUTES);
+            }
+
+            return value == null ? 0 : value.intValue();
+
+        } catch (Exception e) {
+            log.error("Redis increment attempt failed", e);
+            return 0;
+        }
     }
 }

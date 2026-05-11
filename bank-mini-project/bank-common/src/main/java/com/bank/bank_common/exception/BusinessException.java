@@ -1,5 +1,7 @@
 package com.bank.bank_common.exception;
+import lombok.AllArgsConstructor;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 
 @Getter
 public class BusinessException extends RuntimeException {

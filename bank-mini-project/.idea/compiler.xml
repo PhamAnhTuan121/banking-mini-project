@@ -10,6 +10,7 @@
         <module name="api-gateway" />
         <module name="audit-log-service" />
         <module name="bank-common" />
+        <module name="account-service (2)" />
         <module name="otp-service" />
         <module name="eureka-server" />
       </profile>
@@ -34,6 +35,7 @@
           <entry name="$MAVEN_REPOSITORY$/org/mapstruct/mapstruct/1.5.5.Final/mapstruct-1.5.5.Final.jar" />
         </processorPath>
         <module name="account-service" />
+        <module name="account-service (1)" />
       </profile>
       <profile name="Annotation profile for config-server" enabled="true">
         <sourceOutputDir name="target/generated-sources/annotations" />
@@ -44,7 +46,7 @@
         </processorPath>
         <module name="config-server" />
       </profile>
-      <profile name="Annotation profile for customer-service" enabled="true">
+      <profile name="Annotation profile for transaction-service" enabled="true">
         <sourceOutputDir name="target/generated-sources/annotations" />
         <sourceTestOutputDir name="target/generated-test-sources/test-annotations" />
         <outputRelativeToContentRoot value="true" />
@@ -53,8 +55,8 @@
           <entry name="$MAVEN_REPOSITORY$/org/mapstruct/mapstruct-processor/1.5.5.Final/mapstruct-processor-1.5.5.Final.jar" />
           <entry name="$MAVEN_REPOSITORY$/org/mapstruct/mapstruct/1.5.5.Final/mapstruct-1.5.5.Final.jar" />
         </processorPath>
-        <module name="customer-service" />
         <module name="transaction-service" />
+        <module name="customer-service" />
         <module name="notification-service" />
       </profile>
     </annotationProcessing>
@@ -65,6 +67,8 @@
   <component name="JavacSettings">
     <option name="ADDITIONAL_OPTIONS_OVERRIDE">
       <module name="account-service" options="-parameters" />
+      <module name="account-service (1)" options="-parameters" />
+      <module name="account-service (2)" options="-parameters" />
       <module name="api-gateway" options="-parameters" />
       <module name="audit-log-service" options="-parameters" />
       <module name="auth-service" options="-parameters" />

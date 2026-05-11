@@ -1,13 +1,14 @@
 package com.bank.account_service.service.impl;
 
 import com.bank.account_service.dto.request.AccountCreateRequest;
-import com.bank.account_service.dto.response.AccountResponse;
+
 import com.bank.account_service.entity.Account;
 import com.bank.account_service.entity.Status;
 import com.bank.account_service.kafka.AuditLogAccountProducer;
 import com.bank.account_service.mapper.AccountMapper;
 import com.bank.account_service.repository.AccountRepository;
 import com.bank.account_service.service.AccountService;
+import com.bank.bank_common.dto.account.response.AccountResponse;
 import com.bank.bank_common.dto.audit_log.AuditEvent;
 import com.bank.bank_common.exception.BusinessException;
 import com.bank.bank_common.exception.ErrorCode;
@@ -85,23 +86,24 @@ public class AccountServiceImpl implements AccountService {
         Account account = findActiveAccount(accountNumber);
         account.setBalance(account.getBalance().add(amount));
         accountRepository.save(account);
-        accountRepository.save(account);
         return accountMapper.toResponse(account);
     }
 
     @Override
     @Transactional
     public AccountResponse withdraw(String accountNumber, BigDecimal amount) {
-        validateAmount(amount);
-        Account account = findActiveAccount(accountNumber);
 
-        if (account.getStatus() == Status.BLOCKED) {
-            throw new BusinessException(ErrorCode.ACCOUNT_BLOCKED);
-        }
+        validateAmount(amount);
+
+        Account account = findActiveAccount(accountNumber);
 
         if (account.getBalance().compareTo(amount) < 0) {
             throw new BusinessException(ErrorCode.INSUFFICIENT_BALANCE);
         }
+
+        account.setBalance(account.getBalance().subtract(amount));
+        accountRepository.save(account);
+
         return accountMapper.toResponse(account);
     }
 
@@ -116,17 +118,12 @@ public class AccountServiceImpl implements AccountService {
         Account account = accountRepository.findByAccountNumber(accountNumber)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_NOT_FOUND));
 
-        if (account.getStatus() == Status.BLOCKED) {
-            throw new BusinessException(ErrorCode.ACCOUNT_BLOCKED);
+        switch (account.getStatus()) {
+            case BLOCKED -> throw new BusinessException(ErrorCode.ACCOUNT_BLOCKED);
+            case FROZEN -> throw new BusinessException(ErrorCode.ACCOUNT_FROZEN);
+            case CLOSED -> throw new BusinessException(ErrorCode.ACCOUNT_CLOSED);
         }
 
-        if (account.getStatus() == Status.FROZEN) {
-            throw new BusinessException(ErrorCode.ACCOUNT_FROZEN);
-        }
-
-        if (account.getStatus() == Status.CLOSED) {
-            throw new BusinessException(ErrorCode.ACCOUNT_CLOSED);
-        }
         return account;
     }
 

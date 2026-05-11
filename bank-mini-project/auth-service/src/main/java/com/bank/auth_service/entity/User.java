@@ -27,6 +27,7 @@ public class User {
 
     private Boolean phoneVerified = false;
 
+    @Column(name = "full_name")
     private String fullName;
 
     private String email;

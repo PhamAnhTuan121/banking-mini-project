@@ -1,7 +1,8 @@
 package com.bank.account_service.controller;
 
-import com.bank.account_service.dto.response.AccountResponse;
+
 import com.bank.account_service.service.AccountService;
+import com.bank.bank_common.dto.account.response.AccountResponse;
 import com.bank.bank_common.util.SecurityUtils;
 import lombok.RequiredArgsConstructor;
 
@@ -19,7 +20,6 @@ public class AccountController {
     @GetMapping("/me")
     public AccountResponse getMyAccount() {
         Long userId = SecurityUtils.getCurrentUserId();
-        System.out.println("userId = " + userId);
         return accountService.getUserIdByUserId(userId);
     }
 

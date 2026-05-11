@@ -20,10 +20,10 @@ public class Customer {
     @Column(name = "user_id", nullable = false, unique = true)
     private Long userId;
 
-    @Column(name = "full_name", nullable = false)
-    private String fullName;
+//    @Column(name = "full_name", nullable = false)
+//    private String fullName;
 
-    private String phone;
+//    private String phone;
 
     private String address;
 
@@ -42,8 +42,5 @@ public class Customer {
 
     @Column(name = "last_reset_date", nullable = false)
     private LocalDate lastResetDate;
-
-    @Column(name = "phone_verified", nullable = false)
-    private Boolean phoneVerified = false;
 
 }

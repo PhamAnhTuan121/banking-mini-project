@@ -1,11 +1,14 @@
 package com.bank.bank_common.security;
 
 import com.bank.bank_common.constant.SecurityConstants;
-import jakarta.servlet.*;
-import jakarta.servlet.http.*;
+import com.bank.bank_common.service.JwtService;
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.*;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
@@ -14,9 +17,11 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 import java.util.List;
 
-@RequiredArgsConstructor
 @Component
+@RequiredArgsConstructor
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
+
+    private final JwtService jwtService;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
@@ -24,43 +29,77 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                                     FilterChain filterChain)
             throws ServletException, IOException {
 
-        // ===== 1. INTERNAL SERVICE CALL =====
-        String internalSource = request.getHeader(SecurityConstants.HEADER_INTERNAL);
+        try {
+            String internalToken =
+                    request.getHeader(SecurityConstants.HEADER_INTERNAL);
+            if (SecurityConstants.INTERNAL_SECRET.equals(internalToken)) {
+                Authentication auth =
+                        new UsernamePasswordAuthenticationToken(
+                                "internal-service",
+                                null,
+                                List.of(
+                                        new SimpleGrantedAuthority(
+                                                SecurityConstants.ROLE_INTERNAL
+                                        )
+                                )
+                        );
+                SecurityContextHolder.getContext().setAuthentication(auth);
+                filterChain.doFilter(request, response);
+                return;
+            }
 
-        if (internalSource != null) {
+            String authHeader = request.getHeader("Authorization");
 
-            Authentication auth = new UsernamePasswordAuthenticationToken(
-                    internalSource,
-                    null,
-                    List.of(new SimpleGrantedAuthority(SecurityConstants.ROLE_INTERNAL))
+            if (authHeader != null && authHeader.startsWith("Bearer ")) {
+
+                String token = authHeader.substring(7);
+
+                if (jwtService.validateToken(token)) {
+
+                    Long userId =
+                            jwtService.extractUserId(token);
+
+                    List<String> roles =
+                            jwtService.extractRoles(token);
+
+                    List<SimpleGrantedAuthority> authorities =
+                            roles.stream()
+                                    .map(role -> {
+
+                                        String normalizedRole =
+                                                role.toUpperCase();
+
+                                        return new SimpleGrantedAuthority(
+                                                normalizedRole.startsWith("ROLE_")
+                                                        ? normalizedRole
+                                                        : "ROLE_" + normalizedRole
+                                        );
+                                    })
+                                    .toList();
+
+                    Authentication auth =
+                            new UsernamePasswordAuthenticationToken(
+                                    userId,
+                                    null,
+                                    authorities
+                            );
+
+                    SecurityContextHolder.getContext()
+                            .setAuthentication(auth);
+
+                    System.out.println("AUTH OK: " + authorities);
+                }
+            }
+
+        } catch (Exception e) {
+
+            e.printStackTrace();
+
+            response.setStatus(
+                    HttpServletResponse.SC_UNAUTHORIZED
             );
 
-            SecurityContextHolder.getContext().setAuthentication(auth);
-            filterChain.doFilter(request, response);
             return;
-        }
-
-        // ===== 2. USER FROM API GATEWAY =====
-        String userIdHeader = request.getHeader(SecurityConstants.HEADER_USER_ID);
-        String rolesHeader = request.getHeader(SecurityConstants.HEADER_ROLES);
-
-        if (userIdHeader != null && rolesHeader != null) {
-
-            List<SimpleGrantedAuthority> authorities =
-                    List.of(rolesHeader.split(","))
-                            .stream()
-                            .map(role -> new SimpleGrantedAuthority(
-                                    role.startsWith("ROLE_") ? role : "ROLE_" + role
-                            ))
-                            .toList();
-
-            Authentication auth = new UsernamePasswordAuthenticationToken(
-                    Long.parseLong(userIdHeader),
-                    null,
-                    authorities
-            );
-
-            SecurityContextHolder.getContext().setAuthentication(auth);
         }
 
         filterChain.doFilter(request, response);

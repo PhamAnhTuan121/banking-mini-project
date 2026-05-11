@@ -7,10 +7,13 @@ import org.springframework.cloud.client.discovery.EnableDiscoveryClient;
 import org.springframework.cloud.openfeign.EnableFeignClients;
 import org.springframework.context.annotation.Import;
 
-@SpringBootApplication
+
 @EnableDiscoveryClient
 @EnableFeignClients
 @Import({JwtService.class})
+@SpringBootApplication(scanBasePackages = {
+		"com.bank" // Thêm package này để Spring tìm thấy BaseFeignErrorDecoder
+})
 public class AuthServiceApplication {
 
 	public static void main(String[] args) {

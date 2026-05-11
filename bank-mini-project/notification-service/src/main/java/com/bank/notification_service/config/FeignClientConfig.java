@@ -9,7 +9,8 @@ import org.springframework.context.annotation.Configuration;
 public class FeignClientConfig {
 
     @Bean
-    public ErrorDecoder errorDecoder() {
-        return new BaseFeignErrorDecoder();
+    public ErrorDecoder errorDecoder(BaseFeignErrorDecoder decoder) {
+        return decoder;
     }
+
 }

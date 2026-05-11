@@ -2,8 +2,10 @@ package com.bank.transaction_service.service.impl;
 
 import com.bank.bank_common.dto.account.request.DepositRequest;
 import com.bank.bank_common.dto.account.request.WithdrawRequest;
+import com.bank.bank_common.dto.account.response.AccountResponse;
 import com.bank.bank_common.dto.event.TransactionSuccessEvent;
 import com.bank.bank_common.dto.otp.OtpType;
+import com.bank.bank_common.dto.otp.request.ResendOtpRequest;
 import com.bank.bank_common.exception.BusinessException;
 import com.bank.bank_common.exception.ErrorCode;
 import com.bank.transaction_service.client_wrapper.AccountService;
@@ -51,11 +53,19 @@ public class TransactionServiceImpl implements TransactionService {
     @Override
     public TransferResponseRequest requestTransfer(TransactionRequest request, Long userId) {
         String toAccount = request.getToAccount().trim();
+
+        if (toAccount.endsWith(".")) {
+            toAccount =
+                    toAccount.substring(0, toAccount.length() - 1);
+        }
+
         AccountResponse fromAccount =
                 accountService.getAccountByUserId(userId);
 
         AccountResponse sender =
-                accountService.getByAccountNumber(fromAccount.getAccountNumber());
+                accountService.getByAccountNumber(
+                        fromAccount.getAccountNumber()
+                );
 
         if (fromAccount.getAccountNumber().equals(toAccount)) {
             throw new BusinessException(ErrorCode.SAME_ACCOUNT_TRANSFER);
@@ -84,9 +94,10 @@ public class TransactionServiceImpl implements TransactionService {
                 toAccount = toAccount.substring(0, toAccount.length() - 1);
             }
 
-            if (fromAccount.getStatus().equals("BLOCKED")) {
-                throw new BusinessException(ErrorCode.ACCOUNT_BLOCKED);
+            if (fromAccount.getStatus().equals("FROZEN")) {
+                throw new BusinessException(ErrorCode.ACCOUNT_FROZEN);
             }
+
 
             if (!sender.getUserId().equals(userId)) {
                 throw new BusinessException(ErrorCode.UNAUTHORIZED);
@@ -153,13 +164,6 @@ public class TransactionServiceImpl implements TransactionService {
             throw new BusinessException(ErrorCode.INVALID_TRANSACTION_STATE);
         }
 
-        if (LocalDateTime.now().isAfter(tx.getExpiredAt())) {
-            tx.setStatus(TransactionStatus.EXPIRED);
-            transactionRepository.save(tx);
-
-            throw new BusinessException(ErrorCode.OTP_EXPIRED);
-        }
-
         AccountResponse sender = accountService.getAccountByUserId(userId);
 
         if (!sender.getAccountNumber().equals(tx.getFromAccount())) {
@@ -190,7 +194,6 @@ public class TransactionServiceImpl implements TransactionService {
 
             } catch (Exception depositEx) {
 
-                // 💣 COMPENSATION (ROLLBACK)
                 accountService.deposit(
                         tx.getFromAccount(),
                         new DepositRequest(tx.getAmount())
@@ -361,7 +364,7 @@ public class TransactionServiceImpl implements TransactionService {
     }
 
     @Override
-    public Page<TransactionResponse> getInternalTransactions(String accountNumber, TransactionType type, TransactionStatus status , int page, int size) {
+    public Page<TransactionResponse> getInternalTransactions(String accountNumber, TransactionType type, TransactionStatus status, int page, int size) {
         Pageable pageable = PageRequest.of(
                 page,
                 size,
@@ -390,7 +393,7 @@ public class TransactionServiceImpl implements TransactionService {
 
     @Override
     @Transactional
-    public void retryTransaction(Long id, Long employeeId) {
+    public void retryTransaction(Long id, Long adminId) {
 
         Transaction tx = transactionRepository.findById(id)
                 .orElseThrow(() ->
@@ -429,7 +432,7 @@ public class TransactionServiceImpl implements TransactionService {
             tx.setStatus(TransactionStatus.SUCCESS);
             transactionRepository.save(tx);
             auditHelper.success(
-                    employeeId,
+                    adminId,
                     TransactionAuditEvent.RETRY_TRANSACTION,
                     "RETRY_TRANSACTION",
                     "Retry success",
@@ -440,7 +443,7 @@ public class TransactionServiceImpl implements TransactionService {
             tx.setStatus(TransactionStatus.FAILED);
             transactionRepository.save(tx);
             auditHelper.fail(
-                    employeeId,
+                    adminId,
                     TransactionAuditEvent.RETRY_TRANSACTION,
                     "RETRY_TRANSACTION",
                     ex.getErrorCode().getMessage(),
@@ -454,7 +457,7 @@ public class TransactionServiceImpl implements TransactionService {
             transactionRepository.save(tx);
 
             auditHelper.fail(
-                    employeeId,
+                    adminId,
                     TransactionAuditEvent.RETRY_TRANSACTION,
                     "RETRY_TRANSACTION",
                     "System error",
@@ -547,6 +550,70 @@ public class TransactionServiceImpl implements TransactionService {
                 .findByStatus(TransactionStatus.FAILED, pageable);
 
         return txs.map(transactionMapper::toResponse);
+    }
+
+    @Override
+    public void resendOtp(String correlationId) {
+
+        correlationId = correlationId.trim().toLowerCase();
+
+        ResendOtpRequest request = new ResendOtpRequest(
+                correlationId,
+                OtpType.TRANSFER
+        );
+
+        otpService.resendOtp(request.getIdentifier());
+    }
+
+    @Override
+    @Transactional
+    public void cancelTransaction(Long id, Long adminId) {
+        Transaction tx = transactionRepository.findById(id)
+                .orElseThrow(() -> new BusinessException(ErrorCode.TRANSACTION_NOT_FOUND));
+
+        if (tx.getStatus() == TransactionStatus.SUCCESS) {
+            throw new BusinessException(ErrorCode.CANNOT_CANCEL_SUCCESS);
+        }
+
+        tx.setStatus(TransactionStatus.CANCELLED);
+        transactionRepository.save(tx);
+
+        auditHelper.success(
+                adminId,
+                "CANCEL_TRANSACTION",
+                "ADMIN_ACTION",
+                "Transaction cancelled by admin",
+                Map.of("transactionId", id)
+        );
+    }
+
+    @Override
+    @Transactional
+    public void refundTransaction(Long id, Long adminId) {
+        Transaction tx = transactionRepository.findById(id)
+                .orElseThrow(() -> new BusinessException(ErrorCode.TRANSACTION_NOT_FOUND));
+
+        if (tx.getStatus() == TransactionStatus.REFUNDED) {
+            throw new BusinessException(ErrorCode.ALREADY_REFUNDED);
+        }
+
+        if (tx.getStatus() != TransactionStatus.SUCCESS) {
+            throw new BusinessException(ErrorCode.INVALID_TRANSACTION_STATE);
+        }
+
+        accountService.withdraw(tx.getToAccount(), new WithdrawRequest(tx.getAmount()));
+        accountService.deposit(tx.getFromAccount(), new DepositRequest(tx.getAmount()));
+
+        tx.setStatus(TransactionStatus.REFUNDED);
+        transactionRepository.save(tx);
+
+        auditHelper.success(
+                adminId,
+                "REFUND_TRANSACTION",
+                "ADMIN_ACTION",
+                "Refund completed",
+                Map.of("transactionId", id)
+        );
     }
 
 }

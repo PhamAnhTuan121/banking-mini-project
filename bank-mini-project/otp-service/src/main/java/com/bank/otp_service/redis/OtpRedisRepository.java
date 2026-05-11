@@ -11,20 +11,14 @@ public interface OtpRedisRepository {
 
     OtpData getOtpData(String identifier, OtpType type);
 
-    void deleteOtp(String identifier, OtpType type);
-
-    void incrementAttempts(String identifier, OtpType type);
-
-    int getAttempts(String identifier, OtpType type);
-
     void resetAttempts(String identifier, OtpType type);
-
-    void updateOtpKeepTtl(String identifier, OtpType type, OtpData data);
 
     void clearAll(String identifier, OtpType type);
 
     boolean isCooldown(String identifier, OtpType type);
 
     void setCooldown(String identifier, OtpType type, long seconds);
+
+    int incrementAttemptsAndGet(String identifier, OtpType type);
 
 }

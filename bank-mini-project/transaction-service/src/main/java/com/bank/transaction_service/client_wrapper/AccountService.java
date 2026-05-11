@@ -3,10 +3,11 @@ package com.bank.transaction_service.client_wrapper;
 import com.bank.bank_common.dto.account.request.DepositRequest;
 import com.bank.bank_common.dto.account.request.WithdrawRequest;
 
+import com.bank.bank_common.dto.account.response.AccountResponse;
 import com.bank.bank_common.exception.BusinessException;
 import com.bank.bank_common.exception.ErrorCode;
 import com.bank.transaction_service.client.AccountClient;
-import com.bank.transaction_service.dto.transaction.response.AccountResponse;
+
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -26,15 +27,15 @@ public class AccountService {
         throw new BusinessException(ErrorCode.ACCOUNT_SERVICE_UNAVAILABLE);
     }
 
-    @CircuitBreaker(name = "accountService", fallbackMethod = "fallbackGetByAccountNumber")
+//    @CircuitBreaker(name = "accountService", fallbackMethod = "fallbackGetByAccountNumber")
     public AccountResponse getByAccountNumber(String accountNumber) {
         return accountClient.getAccountByAccountNumber(accountNumber);
     }
 
-    public AccountResponse fallbackGetByAccountNumber(String accountNumber, Throwable ex) {
-        System.out.println("loi 2 " +ex.getMessage());
-        throw new BusinessException(ErrorCode.ACCOUNT_SERVICE_UNAVAILABLE);
-    }
+//    public AccountResponse fallbackGetByAccountNumber(String accountNumber, Throwable ex) {
+//        System.out.println("loi 2 " +ex.getMessage());
+//        throw new BusinessException(ErrorCode.ACCOUNT_SERVICE_UNAVAILABLE);
+//    }
 
     @CircuitBreaker(name = "accountService", fallbackMethod = "fallbackWithdraw")
     public void withdraw(String account, WithdrawRequest request) {

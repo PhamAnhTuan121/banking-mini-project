@@ -12,8 +12,16 @@ spring:
           uri: https://github.com/PhamAnhTuan121/bank-mini-config
           clone-on-start: true
 
-
 eureka:
   client:
     service-url:
-      defaultZone: http://localhost:8761/eureka/ # Địa chỉ Eureka Server
+      defaultZone: http://eureka-server:8761/eureka/
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always

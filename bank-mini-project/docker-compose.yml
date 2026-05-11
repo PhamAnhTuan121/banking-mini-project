@@ -1,39 +1,11 @@
 version: '3.9'
 
 services:
-  # ================================================================
-  # 1. EUREKA SERVER
-  # ================================================================
-  eureka-server:
-    build: ./eureka-server
-    container_name: eureka-server
-    restart: always
-    ports:
-      - "8761:8761"
-    networks:
-      - bank-network
 
-  # ================================================================
-  # 2. API GATEWAY
-  # ================================================================
-  api-gateway:
-    build: ./api-gateway
-    container_name: api-gateway
-    restart: always
-    ports:
-      - "8080:8080"
-    depends_on:
-      eureka-server:
-        condition: service_started
-    environment:
-      SERVER_PORT: 8080
-      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
-    networks:
-      - bank-network
+  # =========================
+  # INFRASTRUCTURE
+  # =========================
 
-  # ================================================================
-  # 3. MYSQL DATABASE
-  # ================================================================
   mysql:
     image: mysql:8.0
     container_name: mysql
@@ -44,171 +16,328 @@ services:
       - "3306:3306"
     volumes:
       - mysql_data:/var/lib/mysql
-      - ./init_schema.sql:/docker-entrypoint-initdb.d/init_schema.sql
+      - ./mysql-init:/docker-entrypoint-initdb.d
+    command: --default-authentication-plugin=mysql_native_password
     networks:
       - bank-network
-    command: --default-authentication-plugin=mysql_native_password
-
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
       interval: 10s
       timeout: 5s
       retries: 10
 
-  # ================================================================
-  # 4. AUTH SERVICE
-  # ================================================================
+  redis:
+    image: redis:7
+    container_name: redis
+    ports:
+      - "6379:6379"
+    networks:
+      - bank-network
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  # =========================
+  # CONFIG + DISCOVERY
+  # =========================
+
+  config-server:
+    build: ./config-server
+    container_name: config-server
+    restart: unless-stopped
+    ports:
+      - "8888:8888"
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      SPRING_CLOUD_CONFIG_SERVER_GIT_URI: https://github.com/PhamAnhTuan121/bank-mini-config
+      EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE: http://eureka-server:8761/eureka/
+      SPRING_CLOUD_CONFIG_FAIL_FAST: true
+      SPRING_RETRY_MAX_ATTEMPTS: 10
+    healthcheck:
+      test: [ "CMD-SHELL", "wget -qO- http://localhost:8888/actuator/health || exit 1" ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - bank-network
+
+  eureka-server:
+    build: ./eureka-server
+    container_name: eureka-server
+    restart: unless-stopped
+    ports:
+      - "8761:8761"
+    depends_on:
+      config-server:
+        condition: service_healthy
+    networks:
+      - bank-network
+    healthcheck:
+      test: [ "CMD", "wget", "-qO-", "http://localhost:8761/actuator/health" ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  api-gateway:
+    build: ./api-gateway
+    container_name: api-gateway
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    depends_on:
+      config-server:
+        condition: service_healthy
+      eureka-server:
+        condition: service_healthy
+    environment:
+      SPRING_CONFIG_IMPORT: optional:configserver:http://config-server:8888/
+      EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE: http://eureka-server:8761/eureka/
+      SPRING_CLOUD_CONFIG_FAIL_FAST: true
+      SPRING_RETRY_MAX_ATTEMPTS: 10
+    networks:
+      - bank-network
+
+  # =========================
+  # MICROSERVICES
+  # =========================
+
   auth-service:
     build: ./auth-service
-    container_name: auth-service
-    restart: always
-    depends_on:
-      mysql:
-        condition: service_healthy
-      eureka-server:
-        condition: service_started
-    environment:
-      SERVER_PORT: 8081
-      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/auth_db?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
-      SPRING_DATASOURCE_USERNAME: root
-      SPRING_DATASOURCE_PASSWORD: 123456
-      SPRING_JPA_HIBERNATE_DDL_AUTO: update
-      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
+    restart: unless-stopped
     ports:
       - "8081:8081"
-    networks:
-      - bank-network
 
-  # ================================================================
-  # 5. USER SERVICE
-  # ================================================================
-  user-service:
-    build: ./user-service
-    container_name: user-service
-    restart: always
     depends_on:
       mysql:
         condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
       eureka-server:
-        condition: service_started
+        condition: service_healthy
+      config-server:
+        condition: service_healthy
+
     environment:
-      SERVER_PORT: 8085
-      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/user_db?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/auth_db?createDatabaseIfNotExist=true
       SPRING_DATASOURCE_USERNAME: root
       SPRING_DATASOURCE_PASSWORD: 123456
-      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
-    ports:
-      - "8085:8085"
+
+      SPRING_REDIS_HOST: redis
+
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
     networks:
       - bank-network
 
-  # ================================================================
-  # 6. ACCOUNT SERVICE
-  # ================================================================
   account-service:
     build: ./account-service
-    container_name: account-service
-    restart: always
-    depends_on:
-      mysql:
-        condition: service_healthy
-      eureka-server:
-        condition: service_started
-      user-service:
-        condition: service_started
-    environment:
-      SERVER_PORT: 8082
-      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/account_db?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
-      SPRING_DATASOURCE_USERNAME: root
-      SPRING_DATASOURCE_PASSWORD: 123456
-      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
+    restart: unless-stopped
     ports:
       - "8082:8082"
-    networks:
-      - bank-network
-
-  # ================================================================
-  # 7. TRANSACTION SERVICE
-  # ================================================================
-  transaction-service:
-    build: ./transaction-service
-    container_name: transaction-service
-    restart: always
     depends_on:
       mysql:
         condition: service_healthy
       eureka-server:
-        condition: service_started
-      account-service:
-        condition: service_started
+        condition: service_healthy
+      config-server:
+        condition: service_healthy
     environment:
-      SERVER_PORT: 8083
-      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/transaction_db?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/account_db?createDatabaseIfNotExist=true
       SPRING_DATASOURCE_USERNAME: root
       SPRING_DATASOURCE_PASSWORD: 123456
-      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
-      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-    ports:
-      - "8083:8083"
+      SPRING_CONFIG_IMPORT: optional:configserver:http://config-server:8888/
+      EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE: http://eureka-server:8761/eureka/
+      SPRING_CLOUD_CONFIG_FAIL_FAST: true
+      SPRING_RETRY_MAX_ATTEMPTS: 10
     networks:
       - bank-network
 
-  # ================================================================
-  # 8. NOTIFICATION SERVICE
-  # ================================================================
-  notification-service:
-    build: ./notification-service
-    container_name: notification-service
-    restart: always
-    depends_on:
-      eureka-server:
-        condition: service_started
-    environment:
-      SERVER_PORT: 8084
-      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
-      SPRING_MAIL_HOST: smtp.gmail.com
-      SPRING_MAIL_PORT: 587
-      SPRING_MAIL_USERNAME: phamtuna785aa@gmail.com
-      SPRING_MAIL_PASSWORD: xvrr oogz gvel oslm
-      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-      KAFKA_TOPIC: transaction-events
+  transaction-service:
+    build: ./transaction-service
+    restart: unless-stopped
     ports:
-      - "8084:8084"
+      - "8083:8083"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      eureka-server:
+        condition: service_healthy
+      config-server:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/transaction_db?createDatabaseIfNotExist=true
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: 123456
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      SPRING_CONFIG_IMPORT: optional:configserver:http://config-server:8888/
+      EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE: http://eureka-server:8761/eureka/
+      SPRING_CLOUD_CONFIG_FAIL_FAST: true
+      SPRING_RETRY_MAX_ATTEMPTS: 10
     networks:
       - bank-network
+
+  customer-service:
+    build: ./customer-service
+    restart: unless-stopped
+    ports:
+      - "8085:8085"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      eureka-server:
+        condition: service_healthy
+      config-server:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/customer_db?createDatabaseIfNotExist=true
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: 123456
+      SPRING_CONFIG_IMPORT: optional:configserver:http://config-server:8888/
+      EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE: http://eureka-server:8761/eureka/
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      SPRING_CLOUD_CONFIG_FAIL_FAST: true
+      SPRING_RETRY_MAX_ATTEMPTS: 10
+    networks:
+      - bank-network
+
+  audit-log-service:
+    build: ./audit-log-service
+    restart: unless-stopped
+    ports:
+      - "8086:8086"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      eureka-server:
+        condition: service_healthy
+      config-server:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/audit_log_db?createDatabaseIfNotExist=true
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: 123456
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      SPRING_CONFIG_IMPORT: optional:configserver:http://config-server:8888/
+      EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE: http://eureka-server:8761/eureka/
+      SPRING_CLOUD_CONFIG_FAIL_FAST: true
+      SPRING_RETRY_MAX_ATTEMPTS: 10
+    networks:
+      - bank-network
+
+  otp-service:
+    build: ./otp-service
+    restart: unless-stopped
+    ports:
+      - "8087:8087"
+    depends_on:
+      redis:
+        condition: service_healthy
+      eureka-server:
+        condition: service_healthy
+      config-server:
+        condition: service_healthy
+    environment:
+      SPRING_REDIS_HOST: redis
+      SPRING_CONFIG_IMPORT: optional:configserver:http://config-server:8888/
+      EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE: http://eureka-server:8761/eureka/
+      SPRING_CLOUD_CONFIG_FAIL_FAST: true
+      SPRING_RETRY_MAX_ATTEMPTS: 10
+    networks:
+      - bank-network
+
+  notification-service:
+    build: ./notification-service
+    restart: unless-stopped
+    ports:
+      - "8084:8084"
+    depends_on:
+      kafka:
+        condition: service_healthy
+      eureka-server:
+        condition: service_healthy
+      config-server:
+        condition: service_healthy
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      MAIL_USERNAME: your_email@gmail.com
+      MAIL_PASSWORD: your_app_password
+      SPRING_CONFIG_IMPORT: optional:configserver:http://config-server:8888/
+      EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE: http://eureka-server:8761/eureka/
+      SPRING_CLOUD_CONFIG_FAIL_FAST: true
+      SPRING_RETRY_MAX_ATTEMPTS: 10
+    networks:
+      - bank-network
+
+  # =========================
+  # KAFKA
+  # =========================
 
   zookeeper:
     image: confluentinc/cp-zookeeper:7.6.0
-    container_name: zookeeper
+    restart: unless-stopped
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
-    ports:
-      - "2181:2181"
+    networks:
+      - bank-network
 
   kafka:
     image: confluentinc/cp-kafka:7.6.0
-    container_name: kafka
+    restart: unless-stopped
     depends_on:
       - zookeeper
     ports:
       - "9092:9092"
-      - "29092:29092"
     environment:
-      KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:9092
       KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_HOST://0.0.0.0:29092
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
-
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
-
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    healthcheck:
+      test: [ "CMD-SHELL", "echo > /dev/tcp/localhost/9092" ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - bank-network
+  # =========================
+  # MONITORING
+  # =========================
 
+  prometheus:
+    image: prom/prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    networks:
+      - bank-network
+    healthcheck:
+      test: [ "CMD", "wget", "-qO-", "http://localhost:9090/-/healthy" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
-# ================================================================
-# VOLUMES & NETWORK
-# ================================================================
+  grafana:
+    image: grafana/grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+    networks:
+      - bank-network
+
 volumes:
   mysql_data:
 

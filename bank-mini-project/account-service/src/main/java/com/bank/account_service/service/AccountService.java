@@ -1,7 +1,8 @@
 package com.bank.account_service.service;
 
 import com.bank.account_service.dto.request.AccountCreateRequest;
-import com.bank.account_service.dto.response.AccountResponse;
+import com.bank.bank_common.dto.account.response.AccountResponse;
+
 import java.math.BigDecimal;
 
 public interface AccountService {

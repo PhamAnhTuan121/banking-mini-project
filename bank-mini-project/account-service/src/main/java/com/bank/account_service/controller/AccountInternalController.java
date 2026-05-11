@@ -1,9 +1,10 @@
 package com.bank.account_service.controller;
 
-import com.bank.account_service.dto.response.AccountResponse;
+
 import com.bank.account_service.service.AccountService;
 import com.bank.bank_common.dto.account.request.DepositRequest;
 import com.bank.bank_common.dto.account.request.WithdrawRequest;
+import com.bank.bank_common.dto.account.response.AccountResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
@@ -26,7 +27,7 @@ public class AccountInternalController {
         return accountService.deposit(accountNumber, request.getAmount());
     }
 
-    @PreAuthorize("hasRole('INTERNAL')")
+    @PreAuthorize("hasAnyRole('INTERNAL','ADMIN')")
     @PutMapping("/{accountNumber}/withdraw")
     public AccountResponse withdraw(
             @PathVariable String accountNumber,
@@ -34,8 +35,6 @@ public class AccountInternalController {
 
         return accountService.withdraw(accountNumber, request.getAmount());
     }
-
-    @PreAuthorize("hasRole('INTERNAL')")
     @GetMapping("/user/{userId}")
     AccountResponse getUserId(@PathVariable Long userId) {
 
@@ -47,9 +46,13 @@ public class AccountInternalController {
         return accountService.getUserIdByUserId(userId);
     }
 
-    @PreAuthorize("hasRole('INTERNAL')")
+    @PreAuthorize("hasAnyRole('INTERNAL','ADMIN')")
     @GetMapping("/account-number/{accountNumber}")
     AccountResponse getAccountByUserId(@PathVariable("accountNumber") String accountNumber) {
+        Authentication auth =
+                SecurityContextHolder.getContext().getAuthentication();
+
+        System.out.println("AUTH = " + auth);
         return accountService.getAccountByNumber(accountNumber);
     }
 

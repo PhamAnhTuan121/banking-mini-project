@@ -16,14 +16,18 @@ public class GlobalExceptionHandler {
             BusinessException ex,
             HttpServletRequest request
     ) {
-        ErrorResponse response = new ErrorResponse(
+             ErrorResponse response = new ErrorResponse(
+                ex.getErrorCode().getStatus(),
                 ex.getErrorCode().getCode(),
                 ex.getMessage(),
                 LocalDateTime.now().toString(),
                 request.getRequestURI()
         );
 
-        return ResponseEntity.badRequest().body(response);
+
+        return ResponseEntity
+        .status(ex.getErrorCode().getStatus())
+        .body(response);
     }
 
 }

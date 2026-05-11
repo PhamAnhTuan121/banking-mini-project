@@ -1,5 +1,6 @@
 package com.bank.auth_service.dto.response;
 
+import com.bank.bank_common.dto.user.response.UserResponse;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -9,7 +10,6 @@ import lombok.Data;
 @Builder
 public class AuthResponse {
     private String message;
-    private int status;
     private UserResponse user;
     private String accessToken;
     private String refreshToken;

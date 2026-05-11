@@ -18,12 +18,11 @@ public class OtpServiceImpl implements OtpService {
 
     private final OtpRedisRepository otpRedisRepository;
 
-    private static final int MAX_ATTEMPTS = 5;
-
     private long getTtl(OtpType type) {
         return switch (type) {
-            case REGISTER, VERIFY_PHONE -> 300;
+            case REGISTER, VERIFY_PHONE, VERIFY_OLD_PHONE, FORGOT_PASSWORD, CHANGE_PHONE -> 300;
             case TRANSFER -> 180;
+
         };
     }
 
@@ -32,81 +31,87 @@ public class OtpServiceImpl implements OtpService {
         return java.security.MessageDigest.isEqual(a.getBytes(), b.getBytes());
     }
 
+    // ================= SEND OTP =================
     @Override
     public void sendOtp(String identifier, OtpType type) {
+
+        identifier = normalize(identifier);
 
         if (otpRedisRepository.isCooldown(identifier, type)) {
             throw new BusinessException(ErrorCode.OTP_COOLDOWN);
         }
 
+        otpRedisRepository.clearAll(identifier, type);
+
         String otp = OtpGenerator.generate6Digit();
 
         otpRedisRepository.saveOtp(identifier, type, otp, getTtl(type));
-        otpRedisRepository.resetAttempts(identifier, type);
-        otpRedisRepository.setCooldown(identifier, type, 30);
 
-        log.info("OTP generated for identifier={}, type={}", identifier, type);
-
+        log.info("OTP generated: identifier={}, type={}", identifier, type);
         System.out.println("OTP: " + otp);
     }
 
+    // ================= VERIFY OTP =================
     @Override
     public void verifyOtp(String identifier, String inputOtp, OtpType type) {
+        identifier = normalize(identifier);
+        if (otpRedisRepository.isCooldown(identifier, type)) {
+            throw new BusinessException(ErrorCode.TOO_MANY_ATTEMPTS);
+        }
 
+        // ❗ Validate format
         if (inputOtp == null || !inputOtp.matches("\\d{6}")) {
             throw new BusinessException(ErrorCode.OTP_INVALID);
         }
 
+        // ❗ Lấy OTP
         OtpData data = otpRedisRepository.getOtpData(identifier, type);
 
         if (data == null) {
-            throw new BusinessException(ErrorCode.OTP_EXPIRED);
+            throw new BusinessException(ErrorCode.OTP_NOT_NULL);
         }
 
-        if (data.isUsed()) {
-            throw new BusinessException(ErrorCode.OTP_ALREADY_USED);
+        if (safeEquals(data.getCode(), inputOtp)) {
+            otpRedisRepository.clearAll(identifier, type);
+            return;
         }
 
-        if (!safeEquals(data.getCode(), inputOtp)) {
+        // ❌ SAI OTP
+        int attempts = otpRedisRepository.incrementAttemptsAndGet(identifier, type);
 
-            otpRedisRepository.incrementAttempts(identifier, type);
+        log.warn("OTP wrong: identifier={}, attempts={}", identifier, attempts);
 
-            int attempts = otpRedisRepository.getAttempts(identifier, type);
-
-            if (attempts >= MAX_ATTEMPTS) {
-                otpRedisRepository.clearAll(identifier, type);
-                otpRedisRepository.setCooldown(identifier, type, 300);
-                throw new BusinessException(ErrorCode.OTP_BLOCKED);
-            }
-
-            throw new BusinessException(ErrorCode.OTP_INVALID);
+        if (attempts >= 5) {
+            otpRedisRepository.setCooldown(identifier, type, 5);
+            otpRedisRepository.resetAttempts(identifier, type);
+            throw new BusinessException(ErrorCode.TOO_MANY_ATTEMPTS);
         }
 
-        data.setUsed(true);
-        otpRedisRepository.updateOtpKeepTtl(identifier, type, data);
-        otpRedisRepository.resetAttempts(identifier, type);
-
-        log.info("OTP verified success: identifier={}, type={}", identifier, type);
+        throw new BusinessException(ErrorCode.OTP_INVALID);
     }
 
+    private String normalize(String identifier) {
+        return identifier == null ? null : identifier.trim().toLowerCase();
+    }
+
+    // ================= RESEND OTP =================
     @Override
     public void resendOtp(String identifier, OtpType type) {
+
+        identifier = normalize(identifier);
 
         if (otpRedisRepository.isCooldown(identifier, type)) {
             throw new BusinessException(ErrorCode.OTP_COOLDOWN);
         }
 
-        int attempts = otpRedisRepository.getAttempts(identifier, type);
-
-        if (attempts >= MAX_ATTEMPTS) {
-            throw new BusinessException(ErrorCode.OTP_BLOCKED);
-        }
+        otpRedisRepository.clearAll(identifier, type);
 
         String otp = OtpGenerator.generate6Digit();
 
         otpRedisRepository.saveOtp(identifier, type, otp, getTtl(type));
         otpRedisRepository.setCooldown(identifier, type, 30);
 
-        log.info("OTP resent for identifier={}, type={}", identifier, type);
+        log.info("OTP resent: identifier={}, type={}", identifier, type);
+        System.out.println("Resend OTP: " + otp);
     }
 }

@@ -1,29 +1,35 @@
 package com.bank.bank_common.config;
 
+import com.bank.bank_common.constant.SecurityConstants;
 import feign.RequestInterceptor;
 import feign.codec.ErrorDecoder;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
 
+@Configuration
 public class InternalFeignConfig {
 
-    private final String serviceName;
-
-    public InternalFeignConfig(
-            @Value("${spring.application.name}") String serviceName
-    ) {
-        this.serviceName = serviceName;
-    }
-
     @Bean
-    public RequestInterceptor requestInterceptor() {
+    public RequestInterceptor internalRequestInterceptor() {
+
         return template -> {
-            template.header("X-INTERNAL-SOURCE", serviceName);
+
+            template.header(
+                    SecurityConstants.HEADER_INTERNAL,
+                    SecurityConstants.INTERNAL_SECRET
+            );
+
+            template.header(
+                    "X-Internal-Source",
+                    "internal-service"
+            );
         };
     }
 
     @Bean
-    public ErrorDecoder errorDecoder() {
-        return new BaseFeignErrorDecoder();
+    public ErrorDecoder errorDecoder(
+            BaseFeignErrorDecoder decoder
+    ) {
+        return decoder;
     }
 }

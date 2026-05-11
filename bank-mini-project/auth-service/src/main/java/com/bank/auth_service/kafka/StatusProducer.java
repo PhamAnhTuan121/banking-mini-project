@@ -31,4 +31,13 @@ public class StatusProducer {
         }
     }
 
+    public void sendUserUpdated(StatusEvent event) {
+        try {
+            kafkaTemplate.send("update-phone-event", event);
+            log.info("Update phone sent to Kafka");
+        }catch (Exception e) {
+            log.error(e.getMessage());
+        }
+    }
+
 }

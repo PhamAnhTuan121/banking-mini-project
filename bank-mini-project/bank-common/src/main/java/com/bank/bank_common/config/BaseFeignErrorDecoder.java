@@ -8,33 +8,52 @@ import feign.Response;
 import feign.codec.ErrorDecoder;
 import org.springframework.stereotype.Component;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+
 @Component
 public class BaseFeignErrorDecoder implements ErrorDecoder {
 
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper;
+    private final ErrorDecoder defaultDecoder = new Default();
+
+    public BaseFeignErrorDecoder(ObjectMapper objectMapper) {
+        this.objectMapper = objectMapper;
+    }
 
     @Override
     public Exception decode(String methodKey, Response response) {
 
+        if (response == null || response.body() == null) {
+            return new BusinessException(ErrorCode.INTERNAL_ERROR);
+        }
+
         try {
-            if (response.body() == null) {
+            String body = new String(
+                    response.body().asInputStream().readAllBytes(),
+                    StandardCharsets.UTF_8
+            );
+
+            if (body.isBlank()) {
                 return new BusinessException(ErrorCode.INTERNAL_ERROR);
             }
 
-            String body = new String(response.body().asInputStream().readAllBytes());
-
             ErrorResponse error = objectMapper.readValue(body, ErrorResponse.class);
 
-            // 🔥 FIX: map theo code string
-            return mapErrorCode(error.getCode());
+            return mapErrorCode(error != null ? error.getCode() : null);
 
-        } catch (Exception e) {
-            e.printStackTrace();
+        } catch (IOException e) {
             return new BusinessException(ErrorCode.INTERNAL_ERROR);
+        } catch (Exception e) {
+            return defaultDecoder.decode(methodKey, response);
         }
     }
 
     private BusinessException mapErrorCode(String code) {
+
+        if (code == null) {
+            return new BusinessException(ErrorCode.INTERNAL_ERROR);
+        }
 
         for (ErrorCode ec : ErrorCode.values()) {
             if (ec.getCode().equals(code)) {
