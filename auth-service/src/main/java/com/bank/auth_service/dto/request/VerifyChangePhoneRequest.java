@@ -1,0 +1,8 @@
+package com.bank.auth_service.dto.request;
+
+import lombok.Data;
+
+@Data
+public class VerifyChangePhoneRequest {
+    private String otp;
+}
