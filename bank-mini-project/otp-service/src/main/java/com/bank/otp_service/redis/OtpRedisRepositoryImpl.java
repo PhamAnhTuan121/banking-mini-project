@@ -79,67 +79,7 @@ public class OtpRedisRepositoryImpl implements OtpRedisRepository {
         }
     }
 
-    @Override
-    public void updateOtpKeepTtl(String identifier, OtpType type, OtpData data) {
-        String key = otpKey(identifier, type);
-
-        try {
-            Long ttl = redisTemplate.getExpire(key, TimeUnit.SECONDS);
-
-            if (ttl == null || ttl <= 0) {
-                log.warn("OTP key expired, skip update");
-                return;
-            }
-
-            redisTemplate.opsForValue().set(
-                    key,
-                    objectMapper.writeValueAsString(data),
-                    ttl,
-                    TimeUnit.SECONDS
-            );
-
-        } catch (Exception e) {
-            log.error("Redis update OTP failed", e);
-            throw new BusinessException(ErrorCode.OTP_SERVICE_UNAVAILABLE);
-        }
-    }
-
-    @Override
-    public void deleteOtp(String identifier, OtpType type) {
-        try {
-            redisTemplate.delete(otpKey(identifier, type));
-        } catch (Exception e) {
-            log.error("Redis delete OTP failed", e);
-        }
-    }
-
     // ================= ATTEMPT =================
-
-    @Override
-    public void incrementAttempts(String identifier, OtpType type) {
-        String key = attemptKey(identifier, type);
-
-        try {
-            Long value = redisTemplate.opsForValue().increment(key);
-            if (value != null && value == 1) {
-                redisTemplate.expire(key, ATTEMPT_TTL, TimeUnit.MINUTES);
-            }
-
-        } catch (Exception e) {
-            log.error("Redis increment attempt failed", e);
-        }
-    }
-
-    @Override
-    public int getAttempts(String identifier, OtpType type) {
-        try {
-            String value = redisTemplate.opsForValue().get(attemptKey(identifier, type));
-            return value == null ? 0 : Integer.parseInt(value);
-        } catch (Exception e) {
-            log.error("Redis get attempt failed", e);
-            return 0;
-        }
-    }
 
     @Override
     public void resetAttempts(String identifier, OtpType type) {
