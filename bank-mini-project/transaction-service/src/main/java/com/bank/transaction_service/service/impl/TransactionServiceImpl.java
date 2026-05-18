@@ -32,6 +32,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -69,6 +70,10 @@ public class TransactionServiceImpl implements TransactionService {
 
         if (fromAccount.getAccountNumber().equals(toAccount)) {
             throw new BusinessException(ErrorCode.SAME_ACCOUNT_TRANSFER);
+        }
+
+        if (request.getAmount().compareTo(new BigDecimal("10000")) < 0) {
+            throw new BusinessException(ErrorCode.MIN_TRANSFER_AMOUNT);
         }
 
         try {
@@ -208,12 +213,25 @@ public class TransactionServiceImpl implements TransactionService {
 
             notificationProducer.sendNotification(
                     TransactionSuccessEvent.builder()
+
                             .correlationId(tx.getCorrelationId())
+
                             .fromAccount(tx.getFromAccount())
+
                             .toAccount(tx.getToAccount())
+
                             .amount(tx.getAmount())
+
+                            .description(tx.getDescription())
+
+                            .bankName("NICE BANK BAC GIANG")
+
+                            .transactionTime(LocalDateTime.now())
+
                             .senderUserId(sender.getUserId())
+
                             .receiverUserId(receiver.getUserId())
+
                             .build()
             );
 
@@ -321,15 +339,13 @@ public class TransactionServiceImpl implements TransactionService {
     @Override
     public Page<TransactionResponse> getHistory(
             Long userId,
-            TransactionType type,
-            TransactionStatus status,
+            String direction,
             String fromDate,
             String toDate,
             int page,
             int size
     ) {
 
-        // 🔥 Lấy account từ Account Service
         AccountResponse account = accountService.getAccountByUserId(userId);
         String accountNumber = account.getAccountNumber();
 
@@ -339,49 +355,82 @@ public class TransactionServiceImpl implements TransactionService {
                 Sort.by(Sort.Direction.DESC, "createdAt")
         );
 
-        LocalDateTime from = fromDate != null ? LocalDateTime.parse(fromDate) : null;
-        LocalDateTime to = toDate != null ? LocalDateTime.parse(toDate) : null;
-        Page<Transaction> transactions = transactionRepository.searchHistory(
-                accountNumber,
-                type,
-                status,
-                from,
-                to,
-                pageable
+        LocalDateTime from = (fromDate != null && !fromDate.isBlank())
+                ? LocalDateTime.parse(fromDate)
+                : null;
+
+        LocalDateTime to = (toDate != null && !toDate.isBlank())
+                ? LocalDateTime.parse(toDate)
+                : null;
+
+        Page<Transaction> result;
+
+        if ("IN".equalsIgnoreCase(direction)) {
+
+            result = transactionRepository.findIncoming(
+                    accountNumber, from, to, pageable
+            );
+
+        } else if ("OUT".equalsIgnoreCase(direction)) {
+
+            result = transactionRepository.findOutgoing(
+                    accountNumber, from, to, pageable
+            );
+
+        } else {
+
+            result = transactionRepository.findAllHistory(
+                    accountNumber, from, to, pageable
+            );
+        }
+
+        return result.map(tx -> TransactionResponse.builder()
+                .id(tx.getId())
+                .fromAccount(tx.getFromAccount())
+                .toAccount(tx.getToAccount())
+                .amount(tx.getAmount())
+                .timestamp(tx.getCreatedAt())
+                .direction(accountNumber.equals(tx.getFromAccount()) ? "OUT" : "IN")
+                .description(tx.getDescription())
+                .build()
         );
-
-        return transactions.map(tx -> {
-            TransactionResponse res = transactionMapper.toResponse(tx);
-
-            if (accountNumber.equals(tx.getFromAccount())) {
-                res.setDirection("OUT");
-            } else {
-                res.setDirection("IN");
-            }
-
-            return res;
-        });
     }
 
     @Override
-    public Page<TransactionResponse> getInternalTransactions(String accountNumber, TransactionType type, TransactionStatus status, int page, int size) {
+    public Page<TransactionResponse> getInternalTransactions(
+            String accountNumber,
+            TransactionType type,
+            TransactionStatus status,
+            int page,
+            int size
+    ) {
+
         Pageable pageable = PageRequest.of(
                 page,
                 size,
                 Sort.by(Sort.Direction.DESC, "createdAt")
         );
 
-        Page<Transaction> transactions = transactionRepository.searchHistory(
-                accountNumber,
-                type,
-                status,
-                null,
-                null,
-                pageable
-        );
+        Page<Transaction> transactions;
+
+        if (status != null && type != null) {
+            transactions = transactionRepository.findByAccountAndTypeAndStatus(
+                    accountNumber,
+                    type,
+                    status,
+                    pageable
+            );
+        } else if (status != null) {
+            transactions = transactionRepository.findByAccountAndStatus(
+                    accountNumber,
+                    status,
+                    pageable
+            );
+        } else {
+            transactions = transactionRepository.findByAccount(accountNumber, pageable);
+        }
 
         return transactions.map(transactionMapper::toResponse);
-
     }
 
     @Override
@@ -504,18 +553,46 @@ public class TransactionServiceImpl implements TransactionService {
                 size,
                 Sort.by(Sort.Direction.DESC, "createdAt")
         );
+        Page<Transaction> transactions;
+        if (accountNumber != null
+                && !accountNumber.isBlank()
+                && status != null) {
 
-        Page<Transaction> transactions = transactionRepository
-                .searchHistory(
-                        accountNumber,
-                        null,
-                        status,
-                        null,
-                        null,
-                        pageable
-                );
+            transactions =
+                    transactionRepository
+                            .findByAccountAndStatus(
+                                    accountNumber,
+                                    status,
+                                    pageable
+                            );
 
-        return transactions.map(transactionMapper::toResponse);
+        } else if (accountNumber != null
+                && !accountNumber.isBlank()) {
+
+            transactions =
+                    transactionRepository
+                            .findByAccount(
+                                    accountNumber,
+                                    pageable
+                            );
+        } else if (status != null) {
+
+            transactions =
+                    transactionRepository
+                            .findByStatus(
+                                    status,
+                                    pageable
+                            );
+        } else {
+
+            transactions =
+                    transactionRepository
+                            .findAll(pageable);
+        }
+
+        return transactions.map(
+                transactionMapper::toResponse
+        );
     }
 
     @Override

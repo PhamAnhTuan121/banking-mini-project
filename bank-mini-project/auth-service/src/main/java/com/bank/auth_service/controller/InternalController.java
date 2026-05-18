@@ -3,6 +3,7 @@ package com.bank.auth_service.controller;
 import com.bank.auth_service.service.UserService;
 import com.bank.bank_common.dto.auth.response.EmailResponse;
 
+import com.bank.bank_common.dto.auth.response.UserInfoResponse;
 import com.bank.bank_common.dto.user.response.UserResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -20,21 +21,20 @@ public class InternalController {
 
     private final UserService userService;
 
-
-    @GetMapping("/{userId}")
-    public UserResponse getByUserId(@PathVariable Long userId) {
-       return userService.getByUserId(userId);
-    }
-
     @GetMapping("/{id}/email")
     public ResponseEntity<EmailResponse> getEmailUserById(@PathVariable Long id) {
         return ResponseEntity.ok(userService.getEmailById(id));
     }
 
+    @GetMapping("/get/user/{userId}")
+    public UserResponse getByUserId(@PathVariable Long userId) {
+        return userService.getByUserId(userId);
+    }
 
-    @GetMapping("/get/{userId}/phone")
-    public String getPhone(@PathVariable Long userId) {
-        return userService.getPhone(userId);
+
+    @GetMapping("/{id}")
+    public UserInfoResponse getUserInfo(@PathVariable Long id) {
+        return userService.getUserInfo(id);
     }
 
 }

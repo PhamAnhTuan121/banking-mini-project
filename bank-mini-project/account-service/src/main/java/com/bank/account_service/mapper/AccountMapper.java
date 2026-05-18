@@ -9,5 +9,7 @@ import org.mapstruct.Mapping;
 @Mapper(componentModel = "spring")
 public interface AccountMapper {
 
+    @Mapping(target = "accountType", expression = "java(account.getAccountType().name())")
+    @Mapping(target = "currencyCode", source = "currencyCode")
     AccountResponse toResponse(Account account);
 }

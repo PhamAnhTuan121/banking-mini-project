@@ -6,4 +6,5 @@ import com.bank.notification_service.dto.response.NotificationResponse;
 
 public interface NotificationService {
     NotificationResponse sendEmail(NotificationRequest request);
+    NotificationResponse sendOtpEmail(String toEmail , String otp);
 }

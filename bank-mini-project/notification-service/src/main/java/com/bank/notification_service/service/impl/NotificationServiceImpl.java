@@ -30,4 +30,43 @@ public class NotificationServiceImpl implements NotificationService {
             throw new RuntimeException("Send email failed", e);
         }
     }
+
+    @Override
+    public NotificationResponse sendOtpEmail(
+            String toEmail,
+            String otp
+    ) {
+
+        try {
+
+            String subject =
+                    "Verify Your New Email";
+
+            String content =
+                    "Your OTP code is: "
+                            + otp
+                            + "\n\nThis code expires in 5 minutes.";
+
+            SimpleMailMessage message =
+                    new SimpleMailMessage();
+
+            message.setTo(toEmail);
+            message.setSubject(subject);
+            message.setText(content);
+
+            mailSender.send(message);
+
+            return NotificationResponse.builder()
+                    .toEmail(toEmail)
+                    .subject(subject)
+                    .message("OTP email sent successfully")
+                    .build();
+
+        } catch (Exception e) {
+            throw new RuntimeException(
+                    "Send OTP email failed",
+                    e
+            );
+        }
+    }
 }

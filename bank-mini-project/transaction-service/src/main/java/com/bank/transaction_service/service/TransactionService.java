@@ -10,6 +10,8 @@ import com.bank.transaction_service.entity.TransactionStatus;
 import com.bank.transaction_service.entity.TransactionType;
 import org.springframework.data.domain.Page;
 
+import java.math.BigDecimal;
+
 public interface TransactionService {
 
     TransferResponseRequest requestTransfer(TransactionRequest request, Long userId);
@@ -22,8 +24,7 @@ public interface TransactionService {
 
     Page<TransactionResponse> getHistory(
             Long userId,
-            TransactionType type,
-            TransactionStatus status,
+            String direction,
             String fromDate,
             String toDate,
             int page,

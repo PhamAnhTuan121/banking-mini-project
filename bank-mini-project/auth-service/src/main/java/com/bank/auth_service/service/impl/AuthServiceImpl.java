@@ -7,6 +7,7 @@ import com.bank.auth_service.entity.RefreshToken;
 import com.bank.auth_service.entity.Role;
 import com.bank.auth_service.entity.User;
 import com.bank.auth_service.kafka.CreateAccountCustomerProducer;
+import com.bank.auth_service.kafka.EmailOtpProducer;
 import com.bank.auth_service.kafka.StatusProducer;
 import com.bank.auth_service.mapper.UserMapper;
 import com.bank.auth_service.redis.AuthRedisRepository;
@@ -18,6 +19,8 @@ import com.bank.auth_service.service.AuthService;
 import com.bank.auth_service.service.RefreshTokenService;
 import com.bank.auth_service.util.AuditUtil;
 import com.bank.bank_common.client.OtpClient;
+import com.bank.bank_common.dto.auth.request.ChangeEmailRequest;
+import com.bank.bank_common.dto.auth.request.VerifyChangeEmailRequest;
 import com.bank.bank_common.dto.auth.response.RegisterRequestPhoneResponse;
 import com.bank.bank_common.dto.event.StatusEvent;
 import com.bank.bank_common.dto.event.UserActivatedEvent;
@@ -39,6 +42,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.Optional;
+import java.util.Random;
 import java.util.UUID;
 
 @Slf4j
@@ -59,6 +63,7 @@ public class AuthServiceImpl implements AuthService {
     private final AuditUtil auditUtil;
     private final CreateAccountCustomerProducer createAccountCustomerProducer;
     private final StatusProducer statusProducer;
+    private final EmailOtpProducer emailOtpProducer;
 
     @Override
     public AuthResponse login(LoginRequest loginRequest) {
@@ -450,4 +455,55 @@ public class AuthServiceImpl implements AuthService {
 
         authRedisRepository.deletePendingPhoneChange(userId);
     }
+
+    @Override
+    public void requestChangeEmail(Long userId, ChangeEmailRequest request) {
+
+        String newEmail = request.getNewEmail().trim().toLowerCase();
+
+        if (userRepository.existsByEmail(newEmail)) {
+            throw new BusinessException(ErrorCode.EMAIL_ALREADY_EXISTS);
+        }
+
+        String otp = String.valueOf(100000 + new Random().nextInt(900000));
+
+        authRedisRepository.savePendingEmailChange(userId, newEmail);
+
+        authRedisRepository.saveEmailOtp(newEmail, otp);
+        emailOtpProducer.sendOtp(newEmail, otp);
+
+    }
+
+    @Override
+    @Transactional
+    public void verifyChangeEmail(Long userId, VerifyChangeEmailRequest request) {
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+
+        String pendingEmail = authRedisRepository.getPendingEmailChange(userId);
+
+        if (pendingEmail == null) {
+            throw new BusinessException(ErrorCode.EMAIL_NOT_FOUND);
+        }
+
+        String savedOtp = authRedisRepository.getEmailOtp(pendingEmail);
+
+        if (savedOtp == null) {
+            throw new BusinessException(ErrorCode.OTP_EXPIRED);
+        }
+
+        if (!savedOtp.equals(request.getOtp())) {
+            throw new BusinessException(ErrorCode.OTP_INVALID);
+        }
+
+        user.setEmail(pendingEmail);
+
+        userRepository.save(user);
+
+        authRedisRepository.deletePendingEmailChange(userId);
+
+        authRedisRepository.deleteEmailOtp(pendingEmail);
+    }
+
 }

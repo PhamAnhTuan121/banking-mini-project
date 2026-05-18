@@ -36,7 +36,6 @@ public class JwtService {
                 .compact();
     }
 
-    // INTERNAL TOKEN
     public String generateInternalToken(String serviceName) {
         return Jwts.builder()
                 .setSubject(serviceName)

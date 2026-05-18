@@ -15,4 +15,30 @@ public interface AuthRedisRepository {
     String getPendingPhoneChange(Long userId);
 
     void deletePendingPhoneChange(Long userId);
+
+    void savePendingEmailChange(
+            Long userId,
+            String newEmail
+    );
+
+    String getPendingEmailChange(
+            Long userId
+    );
+
+    void deletePendingEmailChange(
+            Long userId
+    );
+
+    void saveEmailOtp(
+            String email,
+            String otp
+    );
+
+    String getEmailOtp(
+            String email
+    );
+
+    void deleteEmailOtp(
+            String email
+    );
 }

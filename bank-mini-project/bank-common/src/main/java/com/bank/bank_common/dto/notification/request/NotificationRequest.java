@@ -20,5 +20,5 @@ public class NotificationRequest {
     @NotBlank(message = "Message body is required")
     private String message;
 
-    private String type; // e.g. TRANSACTION_SUCCESS, ACCOUNT_BLOCKED
+    private String type;
 }

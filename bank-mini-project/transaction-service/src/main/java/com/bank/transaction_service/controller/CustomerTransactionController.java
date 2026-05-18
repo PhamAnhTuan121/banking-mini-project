@@ -4,8 +4,6 @@ import com.bank.transaction_service.dto.transaction.request.ConfirmTransferReque
 import com.bank.transaction_service.dto.transaction.request.TransactionRequest;
 import com.bank.transaction_service.dto.transaction.response.TransferResponseConfirm;
 import com.bank.transaction_service.dto.transaction.response.TransferResponseRequest;
-import com.bank.transaction_service.entity.TransactionStatus;
-import com.bank.transaction_service.entity.TransactionType;
 import com.bank.transaction_service.service.TransactionService;
 import com.bank.transaction_service.util.SecurityUtils;
 import lombok.RequiredArgsConstructor;
@@ -39,17 +37,22 @@ public class CustomerTransactionController {
 
     @GetMapping("/history")
     public ResponseEntity<?> getHistory(
-            @RequestParam(required = false) TransactionType type,
-            @RequestParam(required = false) TransactionStatus status,
+            @RequestParam(required = false) String direction,
             @RequestParam(required = false) String fromDate,
             @RequestParam(required = false) String toDate,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size
+            @RequestParam(defaultValue = "5") int size
     ) {
         Long userId = SecurityUtils.getUserId();
+
         return ResponseEntity.ok(
                 transactionService.getHistory(
-                        userId, type, status, fromDate, toDate, page, size
+                        userId,
+                        direction,
+                        fromDate,
+                        toDate,
+                        page,
+                        size
                 )
         );
     }

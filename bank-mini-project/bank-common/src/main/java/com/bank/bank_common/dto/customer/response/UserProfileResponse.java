@@ -16,7 +16,7 @@ public class UserProfileResponse {
 
     private String fullName;
     private String address;
-
+    private String email;
     @JsonProperty("account_number")
     private String accountNumber;
     private BigDecimal balance;

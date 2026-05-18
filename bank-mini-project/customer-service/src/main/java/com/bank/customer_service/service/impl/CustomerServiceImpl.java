@@ -94,7 +94,7 @@ public class CustomerServiceImpl implements CustomerService, InternalCustomerSer
 
                 .fullName(user.getFullName())
                 .address(customer.getAddress())
-
+                .email(user.getEmail())
                 .accountNumber(account.getAccountNumber())
                 .balance(account.getBalance())
                 .build();

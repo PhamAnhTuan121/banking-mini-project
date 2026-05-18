@@ -31,7 +31,6 @@ public class OtpServiceImpl implements OtpService {
         return java.security.MessageDigest.isEqual(a.getBytes(), b.getBytes());
     }
 
-    // ================= SEND OTP =================
     @Override
     public void sendOtp(String identifier, OtpType type) {
 
@@ -51,20 +50,15 @@ public class OtpServiceImpl implements OtpService {
         System.out.println("OTP: " + otp);
     }
 
-    // ================= VERIFY OTP =================
     @Override
     public void verifyOtp(String identifier, String inputOtp, OtpType type) {
-        identifier = normalize(identifier);
-        if (otpRedisRepository.isCooldown(identifier, type)) {
-            throw new BusinessException(ErrorCode.TOO_MANY_ATTEMPTS);
-        }
 
-        // ❗ Validate format
+        identifier = normalize(identifier);
+
         if (inputOtp == null || !inputOtp.matches("\\d{6}")) {
             throw new BusinessException(ErrorCode.OTP_INVALID);
         }
 
-        // ❗ Lấy OTP
         OtpData data = otpRedisRepository.getOtpData(identifier, type);
 
         if (data == null) {
@@ -72,17 +66,17 @@ public class OtpServiceImpl implements OtpService {
         }
 
         if (safeEquals(data.getCode(), inputOtp)) {
+
             otpRedisRepository.clearAll(identifier, type);
+            otpRedisRepository.resetAttempts(identifier, type); // 🔥 ADD
+
             return;
         }
 
-        // ❌ SAI OTP
         int attempts = otpRedisRepository.incrementAttemptsAndGet(identifier, type);
 
-        log.warn("OTP wrong: identifier={}, attempts={}", identifier, attempts);
-
         if (attempts >= 5) {
-            otpRedisRepository.setCooldown(identifier, type, 5);
+            otpRedisRepository.setCooldown(identifier, type, 60); // lock 1 min
             otpRedisRepository.resetAttempts(identifier, type);
             throw new BusinessException(ErrorCode.TOO_MANY_ATTEMPTS);
         }
@@ -94,7 +88,6 @@ public class OtpServiceImpl implements OtpService {
         return identifier == null ? null : identifier.trim().toLowerCase();
     }
 
-    // ================= RESEND OTP =================
     @Override
     public void resendOtp(String identifier, OtpType type) {
 
@@ -104,11 +97,14 @@ public class OtpServiceImpl implements OtpService {
             throw new BusinessException(ErrorCode.OTP_COOLDOWN);
         }
 
+        otpRedisRepository.resetAttempts(identifier, type);
+
         otpRedisRepository.clearAll(identifier, type);
 
         String otp = OtpGenerator.generate6Digit();
 
         otpRedisRepository.saveOtp(identifier, type, otp, getTtl(type));
+
         otpRedisRepository.setCooldown(identifier, type, 30);
 
         log.info("OTP resent: identifier={}, type={}", identifier, type);

@@ -18,6 +18,6 @@ public interface AuthClient {
     @GetMapping("/api/v1/internal/users/get/{userId}/phone")
     String getPhone(@PathVariable Long userId);
 
-    @GetMapping("/api/v1/internal/users/{userId}")
+    @GetMapping("/api/v1/internal/users/get/user/{userId}")
     UserResponse getUser(@PathVariable Long userId);
 }

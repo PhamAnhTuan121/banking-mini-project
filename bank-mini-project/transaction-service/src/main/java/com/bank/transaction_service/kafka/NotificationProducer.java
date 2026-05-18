@@ -11,7 +11,7 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class NotificationProducer {
 
-    private final KafkaTemplate<String, Object> kafkaTemplate;
+    private final KafkaTemplate<String, TransactionSuccessEvent> kafkaTemplate;
 
     private final String TOPIC = "notification-topic";
 

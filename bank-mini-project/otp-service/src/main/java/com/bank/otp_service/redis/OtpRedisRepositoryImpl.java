@@ -78,7 +78,6 @@ public class OtpRedisRepositoryImpl implements OtpRedisRepository {
             throw new BusinessException(ErrorCode.OTP_SERVICE_UNAVAILABLE);
         }
     }
-
     // ================= ATTEMPT =================
 
     @Override

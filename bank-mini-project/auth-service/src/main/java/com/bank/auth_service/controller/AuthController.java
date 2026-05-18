@@ -4,6 +4,8 @@ import com.bank.auth_service.dto.request.*;
 import com.bank.auth_service.dto.response.AuthResponse;
 import com.bank.auth_service.service.AuthService;
 import com.bank.bank_common.dto.account.response.ApiResponse;
+import com.bank.bank_common.dto.auth.request.ChangeEmailRequest;
+import com.bank.bank_common.dto.auth.request.VerifyChangeEmailRequest;
 import com.bank.bank_common.dto.otp.request.VerifyOtpRequest;
 import com.bank.bank_common.util.SecurityUtils;
 import jakarta.validation.Valid;
@@ -95,5 +97,22 @@ public class AuthController {
         return ApiResponse.success(
                 "Change phone successfully"
         );
+    }
+
+    @PreAuthorize("hasRole('CUSTOMER')")
+    @PostMapping("/email/change/request")
+    public ApiResponse<String> requestChangeEmail(@RequestBody ChangeEmailRequest request) {
+        Long userId = SecurityUtils.getCurrentUserId();
+        authService.requestChangeEmail(userId, request);
+        return ApiResponse.success("OTP sent to new email successfully");
+    }
+
+    @PreAuthorize("hasRole('CUSTOMER')")
+    @PostMapping("/email/change/verify")
+    public ApiResponse<String> verifyChangeEmail(@RequestBody VerifyChangeEmailRequest request) {
+        Long userId = SecurityUtils.getCurrentUserId();
+
+        authService.verifyChangeEmail(userId, request);
+        return ApiResponse.success("Change email successfully");
     }
 }

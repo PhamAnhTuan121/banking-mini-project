@@ -32,8 +32,8 @@ public enum ErrorCode {
     ACCOUNT_FROZEN(400, "ACC_016", "Account frozen"),
     ACCOUNT_CLOSED(400, "ACC_017", "Account closed"),
 
-
-
+    // ===== NOTIFICATION =====
+    EMAIL_NOT_FOUND(400, "EMAIL_001", "Email not found"),
     // ===== CUSTOMER =====
     PHONE_NOT_FOUND(400, "PHONE_001", "Phone not found"),
     CUSTOMER_NOT_FOUND(400, "PHONE_002", "Customer not found"),
@@ -81,6 +81,7 @@ public enum ErrorCode {
     OTP_VERIFICATION_FAILED(400, "TS_006", "OTP verification failed"),
     CANNOT_CANCEL_SUCCESS(400, "TS_007", "Can't cancel success"),
     ALREADY_REFUNDED(400, "TS_008", "Refund failed"),
+    MIN_TRANSFER_AMOUNT(400 ,"TS_009","Minimum transfer amount is 10,000 VND"),
 
     UNAUTHORIZED(401, "TS_006", "Unauthorized");
 

@@ -22,6 +22,12 @@ public class AuthRedisRepositoryImpl implements AuthRedisRepository {
     private static final String PHONE_CHANGE_KEY =
             "auth:phone:change:";
 
+    private static final String EMAIL_CHANGE_PREFIX =
+            "pending_email_change:";
+
+    private static final String EMAIL_OTP_PREFIX =
+            "email_otp:";
+
     @Override
     public int increaseLoginAttempts(String username) {
 
@@ -76,5 +82,79 @@ public class AuthRedisRepositoryImpl implements AuthRedisRepository {
     public void deletePendingPhoneChange(Long userId) {
 
         redisTemplate.delete(PHONE_CHANGE_KEY + userId);
+    }
+
+    @Override
+    public void savePendingEmailChange(
+            Long userId,
+            String newEmail
+    ) {
+
+        redisTemplate.opsForValue().set(
+                EMAIL_CHANGE_PREFIX + userId,
+                newEmail,
+                5,
+                TimeUnit.MINUTES
+        );
+    }
+
+    @Override
+    public String getPendingEmailChange(
+            Long userId
+    ) {
+
+        Object value = redisTemplate.opsForValue()
+                .get(EMAIL_CHANGE_PREFIX + userId);
+
+        return value != null
+                ? value.toString()
+                : null;
+    }
+
+    @Override
+    public void deletePendingEmailChange(
+            Long userId
+    ) {
+
+        redisTemplate.delete(
+                EMAIL_CHANGE_PREFIX + userId
+        );
+    }
+
+    @Override
+    public void saveEmailOtp(
+            String email,
+            String otp
+    ) {
+
+        redisTemplate.opsForValue().set(
+                EMAIL_OTP_PREFIX + email,
+                otp,
+                5,
+                TimeUnit.MINUTES
+        );
+    }
+
+    @Override
+    public String getEmailOtp(
+            String email
+    ) {
+
+        Object value = redisTemplate.opsForValue()
+                .get(EMAIL_OTP_PREFIX + email);
+
+        return value != null
+                ? value.toString()
+                : null;
+    }
+
+    @Override
+    public void deleteEmailOtp(
+            String email
+    ) {
+
+        redisTemplate.delete(
+                EMAIL_OTP_PREFIX + email
+        );
     }
 }

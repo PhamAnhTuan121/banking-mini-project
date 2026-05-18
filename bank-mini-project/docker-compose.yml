@@ -267,8 +267,8 @@ services:
         condition: service_healthy
     environment:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-      MAIL_USERNAME: your_email@gmail.com
-      MAIL_PASSWORD: your_app_password
+      MAIL_USERNAME: tuanpaph35819@fpt.edu.vn
+      MAIL_PASSWORD: kmnh kkem yxty jilk
       SPRING_CONFIG_IMPORT: optional:configserver:http://config-server:8888/
       EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE: http://eureka-server:8761/eureka/
       SPRING_CLOUD_CONFIG_FAIL_FAST: true
